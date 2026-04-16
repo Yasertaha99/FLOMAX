@@ -1,0 +1,1213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flomax ERD — Database Schema</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #111827;
+            --bg-card: #1a1f35;
+            --bg-card-hover: #1f2542;
+            --border: #2a3155;
+            --border-active: #6366f1;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-indigo: #6366f1;
+            --accent-purple: #a855f7;
+            --accent-cyan: #06b6d4;
+            --accent-emerald: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-rose: #f43f5e;
+            --accent-blue: #3b82f6;
+            --pk-color: #fbbf24;
+            --fk-color: #38bdf8;
+            --enum-color: #c084fc;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* ─── Header ─── */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: rgba(10, 14, 26, 0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-indigo), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .logo-sub {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        .badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .badge-version {
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent-indigo);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .stats {
+            display: flex;
+            gap: 16px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--accent-cyan);
+        }
+
+        .stat-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            padding: 6px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--accent-indigo);
+            color: var(--text-primary);
+        }
+
+        .btn-icon {
+            font-size: 14px;
+        }
+
+        /* ─── Canvas ─── */
+        .canvas-container {
+            position: fixed;
+            top: 56px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overflow: hidden;
+            cursor: grab;
+        }
+
+        .canvas-container:active {
+            cursor: grabbing;
+        }
+
+        .canvas {
+            position: absolute;
+            transform-origin: 0 0;
+        }
+
+        /* ─── SVG Lines ─── */
+        .relationships-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 6000px;
+            height: 4000px;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .rel-line {
+            stroke: var(--border);
+            stroke-width: 2;
+            fill: none;
+            opacity: 0.5;
+            transition: opacity 0.3s, stroke 0.3s;
+        }
+
+        .rel-line.highlighted {
+            stroke: var(--accent-cyan);
+            stroke-width: 2.5;
+            opacity: 1;
+        }
+
+        .rel-marker {
+            fill: var(--border);
+            transition: fill 0.3s;
+        }
+
+        .rel-marker.highlighted {
+            fill: var(--accent-cyan);
+        }
+
+        /* ─── Table Cards ─── */
+        .table-card {
+            position: absolute;
+            min-width: 280px;
+            max-width: 340px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            z-index: 2;
+            transition: box-shadow 0.3s, border-color 0.3s, transform 0.1s;
+            cursor: move;
+            user-select: none;
+        }
+
+        .table-card:hover {
+            border-color: var(--accent-indigo);
+            box-shadow: 0 0 30px rgba(99, 102, 241, 0.15), 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        .table-card.active {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 40px rgba(6, 182, 212, 0.2), 0 8px 32px rgba(0, 0, 0, 0.5);
+            z-index: 10;
+        }
+
+        .table-header {
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .table-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .table-name {
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: -0.3px;
+        }
+
+        .table-count {
+            margin-left: auto;
+            font-size: 10px;
+            color: var(--text-muted);
+            background: rgba(255,255,255,0.05);
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        .table-columns {
+            padding: 6px 0;
+            max-height: 350px;
+            overflow-y: auto;
+        }
+
+        .table-columns::-webkit-scrollbar { width: 4px; }
+        .table-columns::-webkit-scrollbar-track { background: transparent; }
+        .table-columns::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        .col-row {
+            display: flex;
+            align-items: center;
+            padding: 4px 16px;
+            gap: 8px;
+            font-size: 12px;
+            transition: background 0.15s;
+        }
+
+        .col-row:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .col-badge {
+            font-size: 8px;
+            font-weight: 700;
+            padding: 2px 5px;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+            flex-shrink: 0;
+            min-width: 22px;
+            text-align: center;
+        }
+
+        .col-badge-pk {
+            background: rgba(251, 191, 36, 0.15);
+            color: var(--pk-color);
+            border: 1px solid rgba(251, 191, 36, 0.3);
+        }
+
+        .col-badge-fk {
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--fk-color);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+
+        .col-badge-idx {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--accent-emerald);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .col-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11.5px;
+            color: var(--text-primary);
+            flex: 1;
+        }
+
+        .col-type {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: var(--text-muted);
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        .col-type-enum {
+            color: var(--enum-color);
+        }
+
+        .col-nullable {
+            font-size: 9px;
+            color: var(--text-muted);
+            opacity: 0.5;
+        }
+
+        .col-separator {
+            height: 1px;
+            background: var(--border);
+            margin: 4px 16px;
+            opacity: 0.4;
+        }
+
+        /* ─── Legend ─── */
+        .legend {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(26, 31, 53, 0.9);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px 18px;
+            z-index: 50;
+            display: flex;
+            gap: 16px;
+            font-size: 11px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--text-secondary);
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+        }
+
+        /* ─── Minimap ─── */
+        .minimap {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 200px;
+            height: 140px;
+            background: rgba(26, 31, 53, 0.9);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            z-index: 50;
+            overflow: hidden;
+            padding: 8px;
+        }
+
+        .minimap-viewport {
+            border: 1.5px solid var(--accent-indigo);
+            background: rgba(99, 102, 241, 0.08);
+            position: absolute;
+            border-radius: 3px;
+            transition: all 0.1s;
+        }
+
+        .minimap-table {
+            position: absolute;
+            border-radius: 2px;
+            opacity: 0.7;
+        }
+
+        /* ─── Zoom indicator ─── */
+        .zoom-indicator {
+            position: fixed;
+            bottom: 70px;
+            right: 20px;
+            background: rgba(26, 31, 53, 0.9);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 6px 14px;
+            z-index: 50;
+            font-size: 12px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .zoom-btn {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .zoom-btn:hover {
+            background: var(--bg-card-hover);
+            color: var(--text-primary);
+        }
+
+        /* ─── Tooltip ─── */
+        .tooltip {
+            position: fixed;
+            background: var(--bg-card);
+            border: 1px solid var(--accent-indigo);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            z-index: 200;
+            pointer-events: none;
+            display: none;
+            max-width: 250px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        }
+
+        /* ─── Animations ─── */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .table-card {
+            animation: fadeInUp 0.5s ease-out backwards;
+        }
+
+        /* Grid background */
+        .canvas::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 6000px;
+            height: 4000px;
+            background-image:
+                radial-gradient(circle, rgba(99, 102, 241, 0.08) 1px, transparent 1px);
+            background-size: 30px 30px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div class="header-left">
+        <div>
+            <div class="logo">⬡ FLOMAX ERD</div>
+            <div class="logo-sub">Real Estate Marketing Platform — v1.0</div>
+        </div>
+        <span class="badge badge-version">PostgreSQL</span>
+    </div>
+    <div class="header-right">
+        <div class="stats">
+            <div class="stat-item">
+                <div class="stat-value">11</div>
+                <div class="stat-label">Tables</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">9</div>
+                <div class="stat-label">Enums</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">15</div>
+                <div class="stat-label">Relations</div>
+            </div>
+        </div>
+        <div class="controls">
+            <button class="btn" onclick="resetView()">
+                <span class="btn-icon">⟲</span> Reset
+            </button>
+            <button class="btn" onclick="fitToScreen()">
+                <span class="btn-icon">⊞</span> Fit
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="canvas-container" id="canvasContainer">
+    <div class="canvas" id="canvas">
+        <svg class="relationships-svg" id="relationshipsSvg">
+            <defs>
+                <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+                    <polygon points="0 0, 10 3.5, 0 7" class="rel-marker" />
+                </marker>
+                <marker id="arrowhead-hl" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+                    <polygon points="0 0, 10 3.5, 0 7" class="rel-marker highlighted" />
+                </marker>
+                <marker id="one" markerWidth="10" markerHeight="14" refX="5" refY="7" orient="auto">
+                    <line x1="5" y1="0" x2="5" y2="14" stroke="var(--border)" stroke-width="2"/>
+                </marker>
+                <marker id="many" markerWidth="12" markerHeight="14" refX="0" refY="7" orient="auto">
+                    <path d="M0,7 L12,0 M0,7 L12,14 M0,7 L12,7" stroke="var(--border)" stroke-width="1.5" fill="none"/>
+                </marker>
+            </defs>
+        </svg>
+    </div>
+</div>
+
+<div class="legend">
+    <div class="legend-item">
+        <div class="legend-dot" style="background: var(--pk-color);"></div> Primary Key
+    </div>
+    <div class="legend-item">
+        <div class="legend-dot" style="background: var(--fk-color);"></div> Foreign Key
+    </div>
+    <div class="legend-item">
+        <div class="legend-dot" style="background: var(--accent-emerald);"></div> Indexed
+    </div>
+    <div class="legend-item">
+        <div class="legend-dot" style="background: var(--enum-color);"></div> Enum Type
+    </div>
+    <div class="legend-item">
+        <svg width="24" height="10"><line x1="0" y1="5" x2="24" y2="5" stroke="var(--text-muted)" stroke-width="2" stroke-dasharray="4,3"/></svg> Relationship
+    </div>
+</div>
+
+<div class="zoom-indicator">
+    <button class="zoom-btn" onclick="zoomOut()">−</button>
+    <span id="zoomLevel">100%</span>
+    <button class="zoom-btn" onclick="zoomIn()">+</button>
+</div>
+
+<div class="minimap" id="minimap"></div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// ─── Schema Data ───
+const tables = [
+    {
+        name: 'users',
+        icon: '👤',
+        color: '#6366f1',
+        x: 100, y: 100,
+        columns: [
+            { name: 'id', type: 'UUID', pk: true },
+            { name: 'role', type: 'user_role', isEnum: true, nn: true },
+            { name: 'status', type: 'user_status', isEnum: true, nn: true, default: "'pending'" },
+            { name: 'full_name', type: 'VARCHAR(150)', nn: true },
+            { name: 'email', type: 'VARCHAR(255)', nn: true, unique: true, indexed: true },
+            { name: 'phone', type: 'VARCHAR(30)' },
+            { name: 'password_hash', type: 'TEXT', nn: true },
+            { name: 'national_id', type: 'VARCHAR(50)', comment: 'KYC' },
+            { name: 'verified_at', type: 'TIMESTAMPTZ' },
+            { name: 'created_at', type: 'TIMESTAMPTZ', nn: true },
+            { name: 'updated_at', type: 'TIMESTAMPTZ', nn: true },
+        ]
+    },
+    {
+        name: 'refresh_tokens',
+        icon: '🔑',
+        color: '#8b5cf6',
+        x: 100, y: 560,
+        columns: [
+            { name: 'id', type: 'UUID', pk: true },
+            { name: 'user_id', type: 'UUID', fk: 'users.id', nn: true },
+            { name: 'token_hash', type: 'TEXT', nn: true, unique: true },
+            { name: 'expires_at', type: 'TIMESTAMPTZ', nn: true },
+            { name: 'revoked_at', type: 'TIMESTAMPTZ' },
+            { name: 'created_at', type: 'TIMESTAMPTZ', nn: true },
+        ]
+    },
+    {
+        name: 'properties',
+        icon: '🏠',
+        color: '#10b981',
+        x: 520, y: 60,
+        columns: [
+            { name: 'id', type: 'UUID', pk: true },
+            { name: 'owner_id', type: 'UUID', fk: 'users.id', nn: true, comment: "role='owner'" },
+            { name: 'title', type: 'VARCHAR(255)', nn: true },
+            { name: 'description', type: 'TEXT' },
+            { name: 'type', type: 'property_type', isEnum: true, nn: true },
+            { name: 'status', type: 'property_status', isEnum: true, nn: true, default: "'draft'" },
+            { name: 'country', type: 'VARCHAR(100)' },
+            { name: 'city', type: 'VARCHAR(100)' },
+            { name: 'district', type: 'VARCHAR(100)' },
+            { name: 'address', type: 'TEXT' },
+            { name: 'latitude', type: 'NUMERIC(10,7)' },
+            { name: 'longitude', type: 'NUMERIC(10,7)' },
+            { name: 'area_sqm', type: 'NUMERIC(10,2)' },
+            { name: 'bedrooms', type: 'SMALLINT' },
+            { name: 'bathrooms', type: 'SMALLINT' },
+            { name: 'floor', type: 'SMALLINT' },
+            { name: 'total_floors', type: 'SMALLINT' },
+            { name: 'has_parking', type: 'BOOLEAN' },
+            { name: 'is_furnished', type: 'BOOLEAN' },
+            { name: 'asking_price', type: 'NUMERIC(15,2)', nn: true },
+            { name: 'currency', type: 'CHAR(3)', nn: true, default: "'EGP'" },
+            { name: 'commission_pct', type: 'NUMERIC(5,2)', nn: true, comment: '3.00 = 3%' },
+            { name: 'cover_image_url', type: 'TEXT' },
+            { name: 'media_urls', type: 'TEXT[]' },
+            { name: 'owner_contract_url', type: 'TEXT' },
+            { name: 'contract_signed_at', type: 'TIMESTAMPTZ' },
+            { name: 'created_at', type: 'TIMESTAMPTZ', nn: true },
+            { name: 'updated_at', type: 'TIMESTAMPTZ', nn: true },
+        ]
+    },
+    {
+        name: 'property_codes',
+        icon: '🏷️',
+        color: '#f59e0b',
+        x: 960, y: 60,
+        columns: [
+            { name: 'id', type: 'UUID', pk: true },
+            { name: 'property_id', type: 'UUID', fk: 'properties.id', nn: true },
+            { name: 'code', type: 'VARCHAR(20)', nn: true, unique: true, comment: 'FLX-00342-CAI' },
+            { name: 'is_active', type: 'BOOLEAN', nn: true, default: 'TRUE' },
+            { name: 'generated_by', type: 'UUID', fk: 'users.id', nn: true, comment: 'admin' },
+            { name: 'activated_at', type: 'TIMESTAMPTZ' },
+            { name: 'deactivated_at', type: 'TIMESTAMPTZ' },
+            { name: 'created_at', type: 'TIMESTAMPTZ', nn: true },
+        ]
+    },
+    {
+        name: 'marketing_plans',
+        icon: '📊',
+        color: '#06b6d4',
+        x: 520, y: 820,
+        columns: [
+            { name: 'id', type: 'UUID', pk: true },
+            { name: 'property_id', type: 'UUID', fk: 'properties.id', nn: true },
+            { name: 'created_by', type: 'UUID', fk: 'users.id', nn: true, comment: 'admin' },
+            { name: 'title', type: 'VARCHAR(255)' },
+            { name: 'status', type: 'plan_status', isEnum: true, nn: true, default: "'draft'" },
+            { name: 'allocated_budget', type: 'NUMERIC(12,2)', nn: true },
+            { name: 'spent_budget', type: 'NUMERIC(12,2)', nn: true },
+            { name: 'channels', type: 'plan_channel[]', isEnum: true },
+            { name: 'start_date', type: 'DATE' },
+            { name: 'end_date', type: 'DATE' },
+            { name: 'notes', type: 'TEXT' },
+            { name: 'created_at', type: 'TIMESTAMPTZ', nn: true },
+            { name: 'updated_at', type: 'TIMESTAMPTZ', nn: true },
+        ]
+    },
+    {
+        name: 'assignments',
+        icon: '📋',
+        color: '#f43f5e',
+        x: 1380, y: 60,
+        columns: [
+            { name: 'id', type: 'UUID', pk: true },
+            { name: 'code_id', type: 'UUID', fk: 'property_codes.id', nn: true },
+            { name: 'marketer_id', type: 'UUID', fk: 'users.id', nn: true, comment: "role='marketer'" },
+            { name: 'assigned_by', type: 'UUID', fk: 'users.id', nn: true, comment: 'admin' },
+            { name: 'status', type: 'assignment_status', isEnum: true, nn: true, default: "'pending'" },
+            { name: 'marketer_commission_pct', type: 'NUMERIC(5,2)', comment: '% of deal' },
+            { name: 'accepted_at', type: 'TIMESTAMPTZ' },
+            { name: 'rejected_at', type: 'TIMESTAMPTZ' },
+            { name: 'rejection_reason', type: 'TEXT' },
+            { name: 'completed_at', type: 'TIMESTAMPTZ' },
+            { name: 'cancelled_at', type: 'TIMESTAMPTZ' },
+            { name: 'created_at', type: 'TIMESTAMPTZ', nn: true },
+            { name: 'updated_at', type: 'TIMESTAMPTZ', nn: true },
+        ]
+    },
+    {
+        name: 'buyer_profiles',
+        icon: '🛒',
+        color: '#a855f7',
+        x: 100, y: 820,
+        columns: [
+            { name: 'user_id', type: 'UUID', pk: true, fk: 'users.id' },
+            { name: 'budget_min', type: 'NUMERIC(15,2)' },
+            { name: 'budget_max', type: 'NUMERIC(15,2)' },
+            { name: 'preferred_city', type: 'VARCHAR(100)' },
+            { name: 'preferred_types', type: 'property_type[]', isEnum: true },
+            { name: 'notes', type: 'TEXT' },
+            { name: 'created_at', type: 'TIMESTAMPTZ', nn: true },
+        ]
+    },
+    {
+        name: 'deals',
+        icon: '🤝',
+        color: '#3b82f6',
+        x: 1380, y: 520,
+        columns: [
+            { name: 'id', type: 'UUID', pk: true },
+            { name: 'assignment_id', type: 'UUID', fk: 'assignments.id', nn: true },
+            { name: 'buyer_id', type: 'UUID', fk: 'users.id', nn: true, comment: "role='buyer'" },
+            { name: 'status', type: 'deal_status', isEnum: true, nn: true, default: "'lead'" },
+            { name: 'agreed_price', type: 'NUMERIC(15,2)' },
+            { name: 'currency', type: 'CHAR(3)', default: "'EGP'" },
+            { name: 'lead_at', type: 'TIMESTAMPTZ', nn: true },
+            { name: 'negotiation_at', type: 'TIMESTAMPTZ' },
+            { name: 'contracted_at', type: 'TIMESTAMPTZ' },
+            { name: 'completed_at', type: 'TIMESTAMPTZ' },
+            { name: 'cancelled_at', type: 'TIMESTAMPTZ' },
+            { name: 'cancellation_reason', type: 'TEXT' },
+            { name: 'created_at', type: 'TIMESTAMPTZ', nn: true },
+            { name: 'updated_at', type: 'TIMESTAMPTZ', nn: true },
+        ]
+    },
+    {
+        name: 'deal_notes',
+        icon: '📝',
+        color: '#14b8a6',
+        x: 1800, y: 520,
+        columns: [
+            { name: 'id', type: 'UUID', pk: true },
+            { name: 'deal_id', type: 'UUID', fk: 'deals.id', nn: true },
+            { name: 'author_id', type: 'UUID', fk: 'users.id', nn: true },
+            { name: 'content', type: 'TEXT', nn: true },
+            { name: 'created_at', type: 'TIMESTAMPTZ', nn: true },
+        ]
+    },
+    {
+        name: 'commissions',
+        icon: '💰',
+        color: '#eab308',
+        x: 1800, y: 820,
+        columns: [
+            { name: 'id', type: 'UUID', pk: true },
+            { name: 'deal_id', type: 'UUID', fk: 'deals.id', nn: true, unique: true },
+            { name: 'deal_value', type: 'NUMERIC(15,2)', nn: true },
+            { name: 'total_commission', type: 'NUMERIC(15,2)', nn: true },
+            { name: 'commission_pct', type: 'NUMERIC(5,2)', nn: true },
+            { name: 'platform_share', type: 'NUMERIC(15,2)', nn: true },
+            { name: 'marketer_share', type: 'NUMERIC(15,2)', nn: true },
+            { name: 'operational_fund', type: 'NUMERIC(15,2)', nn: true },
+            { name: 'platform_pct', type: 'NUMERIC(5,2)', nn: true, default: '50' },
+            { name: 'marketer_pct', type: 'NUMERIC(5,2)', nn: true, default: '40' },
+            { name: 'operational_pct', type: 'NUMERIC(5,2)', nn: true, default: '10' },
+            { name: 'status', type: 'commission_status', isEnum: true, nn: true, default: "'pending'" },
+            { name: 'marketer_paid_status', type: 'payment_status', isEnum: true, nn: true },
+            { name: 'approved_by', type: 'UUID', fk: 'users.id' },
+            { name: 'approved_at', type: 'TIMESTAMPTZ' },
+            { name: 'marketer_paid_at', type: 'TIMESTAMPTZ' },
+            { name: 'payment_reference', type: 'VARCHAR(255)' },
+            { name: 'created_at', type: 'TIMESTAMPTZ', nn: true },
+            { name: 'updated_at', type: 'TIMESTAMPTZ', nn: true },
+        ]
+    },
+    {
+        name: 'audit_log',
+        icon: '📜',
+        color: '#64748b',
+        x: 960, y: 820,
+        columns: [
+            { name: 'id', type: 'BIGSERIAL', pk: true },
+            { name: 'actor_id', type: 'UUID', fk: 'users.id' },
+            { name: 'action', type: 'VARCHAR(100)', nn: true },
+            { name: 'entity', type: 'VARCHAR(50)' },
+            { name: 'entity_id', type: 'UUID' },
+            { name: 'old_value', type: 'JSONB' },
+            { name: 'new_value', type: 'JSONB' },
+            { name: 'ip_address', type: 'INET' },
+            { name: 'created_at', type: 'TIMESTAMPTZ', nn: true },
+        ]
+    },
+];
+
+// ─── Relationship definitions ───
+const relationships = [];
+tables.forEach(table => {
+    table.columns.forEach(col => {
+        if (col.fk) {
+            const [refTable] = col.fk.split('.');
+            relationships.push({
+                from: table.name,
+                fromCol: col.name,
+                to: refTable,
+                toCol: 'id',
+                type: col.unique ? '1:1' : 'N:1'
+            });
+        }
+    });
+});
+
+// ─── State ───
+let scale = 0.75;
+let panX = 50;
+let panY = 50;
+let isDragging = false;
+let isPanning = false;
+let dragTarget = null;
+let dragOffsetX = 0;
+let dragOffsetY = 0;
+let panStartX = 0;
+let panStartY = 0;
+let activeTable = null;
+
+const canvas = document.getElementById('canvas');
+const container = document.getElementById('canvasContainer');
+const svg = document.getElementById('relationshipsSvg');
+
+// ─── Render Tables ───
+function renderTables() {
+    tables.forEach((table, idx) => {
+        const card = document.createElement('div');
+        card.className = 'table-card';
+        card.id = `table-${table.name}`;
+        card.style.left = `${table.x}px`;
+        card.style.top = `${table.y}px`;
+        card.style.animationDelay = `${idx * 0.05}s`;
+
+        const colCount = table.columns.length;
+        const fkCount = table.columns.filter(c => c.fk).length;
+
+        let html = `
+            <div class="table-header" style="background: linear-gradient(135deg, ${table.color}15, ${table.color}08);">
+                <div class="table-icon" style="background: ${table.color}20; color: ${table.color};">${table.icon}</div>
+                <div class="table-name" style="color: ${table.color};">${table.name}</div>
+                <div class="table-count">${colCount} cols</div>
+            </div>
+            <div class="table-columns">
+        `;
+
+        table.columns.forEach((col, ci) => {
+            let badges = '';
+            if (col.pk) badges += '<span class="col-badge col-badge-pk">PK</span>';
+            if (col.fk) badges += '<span class="col-badge col-badge-fk">FK</span>';
+            if (col.indexed) badges += '<span class="col-badge col-badge-idx">IX</span>';
+            if (!badges) badges = '<span style="min-width:22px;display:inline-block;"></span>';
+
+            const typeClass = col.isEnum ? 'col-type col-type-enum' : 'col-type';
+            const nullable = col.nn ? '' : '<span class="col-nullable">?</span>';
+
+            html += `
+                <div class="col-row" data-col="${col.name}" data-fk="${col.fk || ''}">
+                    ${badges}
+                    <span class="col-name">${col.name}</span>
+                    ${nullable}
+                    <span class="${typeClass}">${col.type}</span>
+                </div>
+            `;
+
+            // Separator after PK section
+            if (col.pk && ci < table.columns.length - 1 && !table.columns[ci + 1].pk) {
+                html += '<div class="col-separator"></div>';
+            }
+        });
+
+        html += '</div>';
+        card.innerHTML = html;
+        canvas.appendChild(card);
+
+        // ─── Drag events ───
+        card.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            e.stopPropagation();
+            isDragging = true;
+            dragTarget = table;
+            const rect = card.getBoundingClientRect();
+            dragOffsetX = e.clientX - rect.left;
+            dragOffsetY = e.clientY - rect.top;
+            card.classList.add('active');
+            activeTable = table.name;
+            highlightRelationships(table.name);
+        });
+
+        card.addEventListener('mouseenter', () => {
+            if (!isDragging) {
+                highlightRelationships(table.name);
+            }
+        });
+
+        card.addEventListener('mouseleave', () => {
+            if (!isDragging && activeTable !== table.name) {
+                clearHighlights();
+            }
+        });
+    });
+}
+
+// ─── Render Relationships ───
+function renderRelationships() {
+    // Clear existing paths
+    const existingPaths = svg.querySelectorAll('.rel-path');
+    existingPaths.forEach(p => p.remove());
+
+    relationships.forEach((rel, idx) => {
+        const fromEl = document.getElementById(`table-${rel.from}`);
+        const toEl = document.getElementById(`table-${rel.to}`);
+        if (!fromEl || !toEl) return;
+
+        const fromTable = tables.find(t => t.name === rel.from);
+        const toTable = tables.find(t => t.name === rel.to);
+
+        const fromX = fromTable.x;
+        const fromY = fromTable.y;
+        const fromW = fromEl.offsetWidth;
+        const fromH = fromEl.offsetHeight;
+
+        const toX = toTable.x;
+        const toY = toTable.y;
+        const toW = toEl.offsetWidth;
+        const toH = toEl.offsetHeight;
+
+        // Calculate center points
+        const fromCX = fromX + fromW / 2;
+        const fromCY = fromY + fromH / 2;
+        const toCX = toX + toW / 2;
+        const toCY = toY + toH / 2;
+
+        // Determine best sides for connection
+        let startX, startY, endX, endY;
+
+        if (Math.abs(fromCX - toCX) > Math.abs(fromCY - toCY)) {
+            // Horizontal connection
+            if (fromCX < toCX) {
+                startX = fromX + fromW;
+                endX = toX;
+            } else {
+                startX = fromX;
+                endX = toX + toW;
+            }
+            startY = fromCY;
+            endY = toCY;
+        } else {
+            // Vertical connection
+            startX = fromCX;
+            endX = toCX;
+            if (fromCY < toCY) {
+                startY = fromY + fromH;
+                endY = toY;
+            } else {
+                startY = fromY;
+                endY = toY + toH;
+            }
+        }
+
+        // Create curved path
+        const midX = (startX + endX) / 2;
+        const midY = (startY + endY) / 2;
+
+        let d;
+        if (Math.abs(startX - endX) > Math.abs(startY - endY)) {
+            d = `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`;
+        } else {
+            d = `M ${startX} ${startY} C ${startX} ${midY}, ${endX} ${midY}, ${endX} ${endY}`;
+        }
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', d);
+        path.setAttribute('class', 'rel-line rel-path');
+        path.setAttribute('data-from', rel.from);
+        path.setAttribute('data-to', rel.to);
+        path.setAttribute('stroke-dasharray', rel.type === '1:1' ? 'none' : '8,4');
+        svg.appendChild(path);
+
+        // Add cardinality labels
+        const labelFrom = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        labelFrom.setAttribute('x', startX + (endX - startX) * 0.15);
+        labelFrom.setAttribute('y', startY + (endY - startY) * 0.15 - 8);
+        labelFrom.setAttribute('fill', '#64748b');
+        labelFrom.setAttribute('font-size', '10');
+        labelFrom.setAttribute('font-family', 'JetBrains Mono');
+        labelFrom.setAttribute('class', 'rel-path');
+        labelFrom.setAttribute('data-from', rel.from);
+        labelFrom.setAttribute('data-to', rel.to);
+        labelFrom.textContent = rel.type === '1:1' ? '1' : 'N';
+        svg.appendChild(labelFrom);
+
+        const labelTo = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        labelTo.setAttribute('x', startX + (endX - startX) * 0.85);
+        labelTo.setAttribute('y', startY + (endY - startY) * 0.85 - 8);
+        labelTo.setAttribute('fill', '#64748b');
+        labelTo.setAttribute('font-size', '10');
+        labelTo.setAttribute('font-family', 'JetBrains Mono');
+        labelTo.setAttribute('class', 'rel-path');
+        labelTo.setAttribute('data-from', rel.from);
+        labelTo.setAttribute('data-to', rel.to);
+        labelTo.textContent = '1';
+        svg.appendChild(labelTo);
+    });
+}
+
+function highlightRelationships(tableName) {
+    const paths = svg.querySelectorAll('.rel-path');
+    paths.forEach(p => {
+        const from = p.getAttribute('data-from');
+        const to = p.getAttribute('data-to');
+        if (from === tableName || to === tableName) {
+            if (p.tagName === 'path') p.classList.add('highlighted');
+            if (p.tagName === 'text') p.setAttribute('fill', '#06b6d4');
+        } else {
+            if (p.tagName === 'path') p.style.opacity = '0.15';
+            if (p.tagName === 'text') p.style.opacity = '0.15';
+        }
+    });
+
+    // Dim other tables
+    tables.forEach(t => {
+        const el = document.getElementById(`table-${t.name}`);
+        if (!el) return;
+        const isConnected = relationships.some(r =>
+            (r.from === tableName && r.to === t.name) ||
+            (r.to === tableName && r.from === t.name) ||
+            t.name === tableName
+        );
+        el.style.opacity = isConnected ? '1' : '0.4';
+    });
+}
+
+function clearHighlights() {
+    const paths = svg.querySelectorAll('.rel-path');
+    paths.forEach(p => {
+        if (p.tagName === 'path') {
+            p.classList.remove('highlighted');
+            p.style.opacity = '';
+        }
+        if (p.tagName === 'text') {
+            p.setAttribute('fill', '#64748b');
+            p.style.opacity = '';
+        }
+    });
+    tables.forEach(t => {
+        const el = document.getElementById(`table-${t.name}`);
+        if (el) el.style.opacity = '1';
+    });
+}
+
+// ─── Pan & Zoom ───
+function updateTransform() {
+    canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+    document.getElementById('zoomLevel').textContent = `${Math.round(scale * 100)}%`;
+    updateMinimap();
+}
+
+container.addEventListener('mousedown', (e) => {
+    if (e.target === container || e.target === canvas) {
+        isPanning = true;
+        panStartX = e.clientX - panX;
+        panStartY = e.clientY - panY;
+        activeTable = null;
+        clearHighlights();
+        document.querySelectorAll('.table-card').forEach(c => c.classList.remove('active'));
+    }
+});
+
+document.addEventListener('mousemove', (e) => {
+    if (isDragging && dragTarget) {
+        const newX = (e.clientX - panX) / scale - dragOffsetX;
+        const newY = (e.clientY - panY - 56) / scale - dragOffsetY;
+        dragTarget.x = Math.round(newX);
+        dragTarget.y = Math.round(newY);
+        const el = document.getElementById(`table-${dragTarget.name}`);
+        el.style.left = `${dragTarget.x}px`;
+        el.style.top = `${dragTarget.y}px`;
+        renderRelationships();
+        updateMinimap();
+    }
+    if (isPanning) {
+        panX = e.clientX - panStartX;
+        panY = e.clientY - panStartY;
+        updateTransform();
+    }
+});
+
+document.addEventListener('mouseup', () => {
+    isDragging = false;
+    isPanning = false;
+    dragTarget = null;
+    document.querySelectorAll('.table-card').forEach(c => c.classList.remove('active'));
+});
+
+container.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.05 : 0.05;
+    const newScale = Math.min(2, Math.max(0.2, scale + delta));
+
+    // Zoom toward cursor
+    const rect = container.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    panX = mx - (mx - panX) * (newScale / scale);
+    panY = my - (my - panY) * (newScale / scale);
+    scale = newScale;
+    updateTransform();
+}, { passive: false });
+
+function zoomIn() {
+    scale = Math.min(2, scale + 0.1);
+    updateTransform();
+}
+function zoomOut() {
+    scale = Math.max(0.2, scale - 0.1);
+    updateTransform();
+}
+function resetView() {
+    scale = 0.75;
+    panX = 50;
+    panY = 50;
+    updateTransform();
+}
+function fitToScreen() {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    tables.forEach(t => {
+        const el = document.getElementById(`table-${t.name}`);
+        minX = Math.min(minX, t.x);
+        minY = Math.min(minY, t.y);
+        maxX = Math.max(maxX, t.x + (el ? el.offsetWidth : 300));
+        maxY = Math.max(maxY, t.y + (el ? el.offsetHeight : 400));
+    });
+    const contentW = maxX - minX + 100;
+    const contentH = maxY - minY + 100;
+    const viewW = container.offsetWidth;
+    const viewH = container.offsetHeight;
+    scale = Math.min(viewW / contentW, viewH / contentH, 1);
+    panX = (viewW - contentW * scale) / 2 - minX * scale + 50;
+    panY = (viewH - contentH * scale) / 2 - minY * scale + 50;
+    updateTransform();
+}
+
+// ─── Minimap ───
+function updateMinimap() {
+    const minimap = document.getElementById('minimap');
+    minimap.innerHTML = '';
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    tables.forEach(t => {
+        const el = document.getElementById(`table-${t.name}`);
+        minX = Math.min(minX, t.x);
+        minY = Math.min(minY, t.y);
+        maxX = Math.max(maxX, t.x + (el ? el.offsetWidth : 300));
+        maxY = Math.max(maxY, t.y + (el ? el.offsetHeight : 300));
+    });
+
+    const mmW = 184; // minimap inner width
+    const mmH = 124;
+    const contentW = maxX - minX || 1;
+    const contentH = maxY - minY || 1;
+    const mmScale = Math.min(mmW / contentW, mmH / contentH) * 0.85;
+
+    tables.forEach(t => {
+        const el = document.getElementById(`table-${t.name}`);
+        const div = document.createElement('div');
+        div.className = 'minimap-table';
+        div.style.left = `${(t.x - minX) * mmScale + 8}px`;
+        div.style.top = `${(t.y - minY) * mmScale + 8}px`;
+        div.style.width = `${(el ? el.offsetWidth : 280) * mmScale}px`;
+        div.style.height = `${(el ? el.offsetHeight : 200) * mmScale}px`;
+        div.style.background = t.color;
+        minimap.appendChild(div);
+    });
+
+    // Viewport rect
+    const vp = document.createElement('div');
+    vp.className = 'minimap-viewport';
+    const viewW = container.offsetWidth;
+    const viewH = container.offsetHeight;
+    vp.style.left = `${(-panX / scale - minX) * mmScale + 8}px`;
+    vp.style.top = `${((-panY + 56) / scale - minY) * mmScale + 8}px`;
+    vp.style.width = `${(viewW / scale) * mmScale}px`;
+    vp.style.height = `${(viewH / scale) * mmScale}px`;
+    minimap.appendChild(vp);
+}
+
+// ─── Init ───
+renderTables();
+requestAnimationFrame(() => {
+    renderRelationships();
+    fitToScreen();
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+    if (e.key === '0') resetView();
+    if (e.key === 'f' || e.key === 'F') fitToScreen();
+    if (e.key === '+' || e.key === '=') zoomIn();
+    if (e.key === '-') zoomOut();
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,339 @@
+-- ============================================================
+--  FLOMAX REAL ESTATE MARKETING PLATFORM — DATABASE SCHEMA
+--  Version 1.0  |  2026-04-16
+-- ============================================================
+
+-- Extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- ─────────────────────────────────────────
+-- ENUMS
+-- ─────────────────────────────────────────
+
+CREATE TYPE user_role AS ENUM ('admin', 'owner', 'marketer', 'buyer');
+CREATE TYPE user_status AS ENUM ('pending', 'active', 'suspended');
+
+CREATE TYPE property_type AS ENUM ('apartment', 'villa', 'office', 'land', 'commercial', 'warehouse');
+CREATE TYPE property_status AS ENUM ('draft', 'active', 'assigned', 'under_offer', 'sold', 'withdrawn');
+
+CREATE TYPE plan_status AS ENUM ('draft', 'active', 'paused', 'completed');
+CREATE TYPE plan_channel AS ENUM ('social_media', 'website', 'email', 'outdoor', 'event', 'referral');
+
+CREATE TYPE assignment_status AS ENUM ('pending', 'accepted', 'rejected', 'completed', 'cancelled');
+
+CREATE TYPE deal_status AS ENUM ('lead', 'negotiation', 'contracted', 'completed', 'cancelled');
+
+CREATE TYPE commission_status AS ENUM ('pending', 'approved', 'paid');
+CREATE TYPE payment_status AS ENUM ('unpaid', 'paid', 'disputed');
+
+
+-- ─────────────────────────────────────────
+-- USERS
+-- ─────────────────────────────────────────
+
+CREATE TABLE users (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    role            user_role NOT NULL,
+    status          user_status NOT NULL DEFAULT 'pending',
+    full_name       VARCHAR(150) NOT NULL,
+    email           VARCHAR(255) NOT NULL UNIQUE,
+    phone           VARCHAR(30),
+    password_hash   TEXT NOT NULL,
+    national_id     VARCHAR(50),                          -- for KYC
+    verified_at     TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_email ON users(email);
+
+
+-- ─────────────────────────────────────────
+-- REFRESH TOKENS
+-- ─────────────────────────────────────────
+
+CREATE TABLE refresh_tokens (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash  TEXT NOT NULL UNIQUE,
+    expires_at  TIMESTAMPTZ NOT NULL,
+    revoked_at  TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_rt_user ON refresh_tokens(user_id);
+
+
+-- ─────────────────────────────────────────
+-- PROPERTIES
+-- ─────────────────────────────────────────
+
+CREATE TABLE properties (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    owner_id        UUID NOT NULL REFERENCES users(id),   -- must have role='owner'
+    title           VARCHAR(255) NOT NULL,
+    description     TEXT,
+    type            property_type NOT NULL,
+    status          property_status NOT NULL DEFAULT 'draft',
+
+    -- Location
+    country         VARCHAR(100),
+    city            VARCHAR(100),
+    district        VARCHAR(100),
+    address         TEXT,
+    latitude        NUMERIC(10, 7),
+    longitude       NUMERIC(10, 7),
+
+    -- Specs
+    area_sqm        NUMERIC(10, 2),
+    bedrooms        SMALLINT,
+    bathrooms       SMALLINT,
+    floor           SMALLINT,
+    total_floors    SMALLINT,
+    has_parking     BOOLEAN DEFAULT FALSE,
+    is_furnished    BOOLEAN DEFAULT FALSE,
+
+    -- Financials
+    asking_price    NUMERIC(15, 2) NOT NULL,
+    currency        CHAR(3) NOT NULL DEFAULT 'EGP',
+    commission_pct  NUMERIC(5, 2) NOT NULL,               -- e.g. 3.00 = 3%
+
+    -- Media
+    cover_image_url TEXT,
+    media_urls      TEXT[],
+
+    -- Contract ref
+    owner_contract_url TEXT,
+    contract_signed_at TIMESTAMPTZ,
+
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_prop_owner ON properties(owner_id);
+CREATE INDEX idx_prop_status ON properties(status);
+
+
+-- ─────────────────────────────────────────
+-- PROPERTY CODES  (isolation layer)
+-- ─────────────────────────────────────────
+-- Marketers ONLY see the code, never owner_id or property_id directly.
+
+CREATE TABLE property_codes (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    property_id UUID NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+    code        VARCHAR(20) NOT NULL UNIQUE,              -- e.g. "FLX-00342-CAI"
+    is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+    generated_by UUID NOT NULL REFERENCES users(id),      -- admin
+    activated_at TIMESTAMPTZ DEFAULT NOW(),
+    deactivated_at TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_code_property ON property_codes(property_id);
+CREATE INDEX idx_code_active ON property_codes(code) WHERE is_active = TRUE;
+
+
+-- ─────────────────────────────────────────
+-- MARKETING PLANS
+-- ─────────────────────────────────────────
+
+CREATE TABLE marketing_plans (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    property_id     UUID NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+    created_by      UUID NOT NULL REFERENCES users(id),   -- admin
+    title           VARCHAR(255),
+    status          plan_status NOT NULL DEFAULT 'draft',
+
+    -- Budget
+    allocated_budget NUMERIC(12, 2) NOT NULL DEFAULT 0,
+    spent_budget     NUMERIC(12, 2) NOT NULL DEFAULT 0,
+
+    -- Channels used (array of enum)
+    channels        plan_channel[],
+
+    start_date      DATE,
+    end_date        DATE,
+    notes           TEXT,
+
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_mplan_property ON marketing_plans(property_id);
+
+
+-- ─────────────────────────────────────────
+-- ASSIGNMENTS  (marketer ↔ property code)
+-- ─────────────────────────────────────────
+
+CREATE TABLE assignments (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    code_id         UUID NOT NULL REFERENCES property_codes(id),
+    marketer_id     UUID NOT NULL REFERENCES users(id),   -- role='marketer'
+    assigned_by     UUID NOT NULL REFERENCES users(id),   -- admin
+    status          assignment_status NOT NULL DEFAULT 'pending',
+
+    -- Expected commission for this marketer on this property
+    marketer_commission_pct  NUMERIC(5, 2),               -- % of deal value
+
+    accepted_at     TIMESTAMPTZ,
+    rejected_at     TIMESTAMPTZ,
+    rejection_reason TEXT,
+    completed_at    TIMESTAMPTZ,
+    cancelled_at    TIMESTAMPTZ,
+
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    UNIQUE (code_id, marketer_id)                         -- one marketer per code at a time
+);
+
+CREATE INDEX idx_assign_marketer ON assignments(marketer_id);
+CREATE INDEX idx_assign_code ON assignments(code_id);
+CREATE INDEX idx_assign_status ON assignments(status);
+
+
+-- ─────────────────────────────────────────
+-- BUYERS
+-- ─────────────────────────────────────────
+-- Buyers are users with role='buyer'. This table stores extra profile data.
+
+CREATE TABLE buyer_profiles (
+    user_id         UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    budget_min      NUMERIC(15, 2),
+    budget_max      NUMERIC(15, 2),
+    preferred_city  VARCHAR(100),
+    preferred_types property_type[],
+    notes           TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+
+-- ─────────────────────────────────────────
+-- DEALS
+-- ─────────────────────────────────────────
+
+CREATE TABLE deals (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    assignment_id   UUID NOT NULL REFERENCES assignments(id),
+    buyer_id        UUID NOT NULL REFERENCES users(id),   -- role='buyer'
+    status          deal_status NOT NULL DEFAULT 'lead',
+
+    -- Agreed financials (filled when status → contracted)
+    agreed_price    NUMERIC(15, 2),
+    currency        CHAR(3) DEFAULT 'EGP',
+
+    -- Key timestamps
+    lead_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    negotiation_at  TIMESTAMPTZ,
+    contracted_at   TIMESTAMPTZ,
+    completed_at    TIMESTAMPTZ,
+    cancelled_at    TIMESTAMPTZ,
+    cancellation_reason TEXT,
+
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_deals_assignment ON deals(assignment_id);
+CREATE INDEX idx_deals_buyer ON deals(buyer_id);
+CREATE INDEX idx_deals_status ON deals(status);
+
+
+-- ─────────────────────────────────────────
+-- DEAL NOTES / ACTIVITY LOG
+-- ─────────────────────────────────────────
+
+CREATE TABLE deal_notes (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    deal_id     UUID NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+    author_id   UUID NOT NULL REFERENCES users(id),
+    content     TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_notes_deal ON deal_notes(deal_id);
+
+
+-- ─────────────────────────────────────────
+-- COMMISSIONS
+-- ─────────────────────────────────────────
+
+CREATE TABLE commissions (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    deal_id             UUID NOT NULL UNIQUE REFERENCES deals(id),
+
+    -- Totals
+    deal_value          NUMERIC(15, 2) NOT NULL,
+    total_commission    NUMERIC(15, 2) NOT NULL,           -- deal_value × commission_pct
+    commission_pct      NUMERIC(5, 2) NOT NULL,
+
+    -- Split (must sum to total_commission)
+    platform_share      NUMERIC(15, 2) NOT NULL,
+    marketer_share      NUMERIC(15, 2) NOT NULL,
+    operational_fund    NUMERIC(15, 2) NOT NULL DEFAULT 0,
+
+    -- Split percentages (of total_commission)
+    platform_pct        NUMERIC(5, 2) NOT NULL DEFAULT 50,
+    marketer_pct        NUMERIC(5, 2) NOT NULL DEFAULT 40,
+    operational_pct     NUMERIC(5, 2) NOT NULL DEFAULT 10,
+
+    -- Status
+    status              commission_status NOT NULL DEFAULT 'pending',
+    marketer_paid_status payment_status NOT NULL DEFAULT 'unpaid',
+
+    approved_by         UUID REFERENCES users(id),
+    approved_at         TIMESTAMPTZ,
+    marketer_paid_at    TIMESTAMPTZ,
+    payment_reference   VARCHAR(255),                      -- bank / transfer ref
+
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    -- Validation: shares must add up
+    CONSTRAINT commission_split_check
+        CHECK (platform_share + marketer_share + operational_fund = total_commission)
+);
+
+
+-- ─────────────────────────────────────────
+-- AUDIT LOG  (optional but recommended)
+-- ─────────────────────────────────────────
+
+CREATE TABLE audit_log (
+    id          BIGSERIAL PRIMARY KEY,
+    actor_id    UUID REFERENCES users(id),
+    action      VARCHAR(100) NOT NULL,                     -- e.g. 'deal.status.changed'
+    entity      VARCHAR(50),                               -- e.g. 'deals'
+    entity_id   UUID,
+    old_value   JSONB,
+    new_value   JSONB,
+    ip_address  INET,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_audit_entity ON audit_log(entity, entity_id);
+CREATE INDEX idx_audit_actor ON audit_log(actor_id);
+
+
+-- ─────────────────────────────────────────
+-- UPDATED_AT TRIGGER (auto-update helper)
+-- ─────────────────────────────────────────
+
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_users_updated          BEFORE UPDATE ON users          FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_properties_updated     BEFORE UPDATE ON properties     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_marketing_plans_updated BEFORE UPDATE ON marketing_plans FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_assignments_updated    BEFORE UPDATE ON assignments    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_deals_updated          BEFORE UPDATE ON deals          FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_commissions_updated    BEFORE UPDATE ON commissions    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
