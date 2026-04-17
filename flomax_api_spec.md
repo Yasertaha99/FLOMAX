@@ -408,3 +408,7 @@ All registered buyers with filters: `?city=Cairo&verified=true`
 7. Only admin can advance deal status beyond 'lead'.
 8. Marketer can submit lead and add notes, but cannot change deal status.
 
+## Owner Workflow
+
+The high‑level Owner workflow is documented in [Owner Workflow](owner_workflow.md).
+
